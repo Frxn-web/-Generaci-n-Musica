@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DAW de Generación Musical con Descarga WAV</title>
+    <title>DAW de Generación Musical v2 (Corregido)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -11,10 +11,12 @@
         body { font-family: 'Inter', sans-serif; }
         .btn { transition: all 0.2s ease-in-out; }
         .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-        .btn.active { background-color: #10B981; color: white; }
-        .btn-record.recording { background-color: #EF4444; animation: pulse 1.5s infinite; }
+        .btn.active, .mute-btn.active { background-color: #10B981; color: white; }
+        .btn-record.recording, .btn-mic.recording { background-color: #EF4444; animation: pulse 1.5s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
         select, input[type="text"] { background-color: #374151; border-color: #4B5563; }
+        #progress-bar-container { background-color: #374151; border-radius: 9999px; overflow: hidden; }
+        #progress-bar { background-color: #4f46e5; width: 0%; height: 100%; transition: width 0.05s linear; }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
@@ -27,15 +29,20 @@
         </header>
 
         <!-- Global Controls -->
-        <section class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex flex-wrap justify-between items-center gap-4">
-            <div class="flex items-center gap-4">
-                <button id="play-stop-btn" class="btn px-6 py-2 bg-green-600 rounded-lg text-lg font-semibold shadow-lg w-28">▶ Play</button>
-                <button id="record-btn" class="btn btn-record px-6 py-2 bg-red-700 rounded-lg text-lg font-semibold shadow-lg">● Grabar</button>
+        <section class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 space-y-4">
+            <div class="flex flex-wrap justify-between items-center gap-4">
+                <div class="flex items-center gap-4">
+                    <button id="play-stop-btn" class="btn px-6 py-2 bg-green-600 rounded-lg text-lg font-semibold shadow-lg w-28">▶ Play</button>
+                    <button id="record-btn" class="btn btn-record px-6 py-2 bg-red-700 rounded-lg text-lg font-semibold shadow-lg">● Grabar</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label for="bpm-slider" class="font-medium">BPM:</label>
+                    <span id="bpm-value" class="font-bold w-10 text-center">120</span>
+                    <input type="range" id="bpm-slider" min="60" max="180" value="120" class="w-32">
+                </div>
             </div>
-            <div class="flex items-center gap-2">
-                <label for="bpm-slider" class="font-medium">BPM:</label>
-                <span id="bpm-value" class="font-bold w-10 text-center">120</span>
-                <input type="range" id="bpm-slider" min="60" max="180" value="120" class="w-32">
+            <div id="progress-bar-container" class="w-full h-2.5">
+                <div id="progress-bar"></div>
             </div>
         </section>
 
@@ -62,17 +69,50 @@
         <!-- Mixer -->
         <section class="space-y-2">
             <h2 class="text-xl font-semibold text-center text-gray-300 mb-4">Mezclador</h2>
-            <div id="mixer-container" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div id="mixer-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <!-- Instrument channels will be injected here by JS -->
             </div>
         </section>
 
-        <!-- Lyrics -->
+        <!-- Vocal Processor -->
         <section class="space-y-3">
-            <h2 class="text-xl font-semibold text-center text-gray-300">Sintetizador Vocal</h2>
+            <h2 class="text-xl font-semibold text-center text-gray-300">Procesador Vocal</h2>
             <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 space-y-3">
-                <textarea id="lyrics-input" class="w-full h-24 bg-gray-700 text-white p-2 rounded-lg focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Escribe aquí... la voz seguirá el ritmo."></textarea>
-                <button id="sing-btn" class="btn w-full py-2 bg-purple-600 rounded-lg font-semibold shadow-lg">Sintetizar Voz</button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Text to Speech -->
+                    <div class="space-y-2">
+                         <h3 class="font-semibold text-lg text-center">Sintetizador de Texto</h3>
+                        <textarea id="lyrics-input" class="w-full h-24 bg-gray-700 text-white p-2 rounded-lg focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Escribe aquí..."></textarea>
+                        <button id="sing-btn" class="btn w-full py-2 bg-purple-600 rounded-lg font-semibold shadow-lg">Sintetizar Texto</button>
+                    </div>
+                    <!-- Mic to Robot -->
+                    <div class="space-y-2">
+                        <h3 class="font-semibold text-lg text-center">Voz Robótica (Micrófono)</h3>
+                         <div class="p-4 bg-gray-700 rounded-lg text-center space-y-3 h-full flex flex-col justify-center">
+                            <p class="text-sm text-gray-400">Activa el micrófono para procesar tu voz en tiempo real.</p>
+                            <button id="mic-btn" class="btn btn-mic w-full py-2 bg-indigo-600 rounded-lg font-semibold shadow-lg">Activar Voz Robótica</button>
+                             <div>
+                                <label for="pitch-shift-slider" class="block text-sm font-medium text-gray-300">Tono Robótico: <span id="pitch-shift-value">0</span></label>
+                                <input type="range" id="pitch-shift-slider" min="-12" max="12" step="1" value="0" class="w-full">
+                            </div>
+                             <div>
+                                <label for="bit-crusher-slider" class="block text-sm font-medium text-gray-300">Calidad Digital: <span id="bit-crusher-value">4</span> bits</label>
+                                <input type="range" id="bit-crusher-slider" min="1" max="8" step="1" value="4" class="w-full">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                 <div class="grid grid-cols-2 gap-4 pt-4 mt-4 border-t border-gray-700">
+                    <h3 class="col-span-2 text-lg font-semibold text-center">Efectos de Ambiente (Voz y Sintetizador)</h3>
+                    <div>
+                        <label for="vocal-reverb-slider" class="block text-sm font-medium text-gray-300">Reverb: <span id="vocal-reverb-value">20</span>%</label>
+                        <input type="range" id="vocal-reverb-slider" min="0" max="100" value="20" class="w-full">
+                    </div>
+                    <div>
+                        <label for="vocal-delay-slider" class="block text-sm font-medium text-gray-300">Delay: <span id="vocal-delay-value">20</span>%</label>
+                        <input type="range" id="vocal-delay-slider" min="0" max="100" value="20" class="w-full">
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -84,17 +124,14 @@
     </div>
 
     <script>
-    // --- INITIALIZATION ---
     document.addEventListener('DOMContentLoaded', () => {
-        // Prevent Tone.js from starting until user interaction
+        // --- INITIALIZATION ---
+        let audioReady = false;
         document.body.addEventListener('click', async () => {
-            if (Tone.context.state !== 'running') {
-                // **FIXED**: Removed the problematic line `Tone.context.set()` which caused the error.
-                // Tone.js will automatically use the browser's default sample rate (usually 44.1kHz or 48kHz),
-                // which is suitable for professional audio.
-                await Tone.start();
-                console.log('AudioContext started at ' + Tone.context.sampleRate + 'kHz.');
-            }
+            if (audioReady) return;
+            await Tone.start();
+            console.log('AudioContext started at ' + Tone.context.sampleRate + 'kHz.');
+            audioReady = true;
         }, { once: true });
 
         // --- DOM ELEMENTS ---
@@ -108,295 +145,422 @@
         const mixerContainer = document.getElementById('mixer-container');
         const lyricsInput = document.getElementById('lyrics-input');
         const singBtn = document.getElementById('sing-btn');
+        const micBtn = document.getElementById('mic-btn');
         const downloadArea = document.getElementById('download-area');
         const downloadLink = document.getElementById('download-link');
+        const progressBar = document.getElementById('progress-bar');
+        const pitchShiftSlider = document.getElementById('pitch-shift-slider');
+        const pitchShiftValue = document.getElementById('pitch-shift-value');
+        const bitCrusherSlider = document.getElementById('bit-crusher-slider');
+        const bitCrusherValue = document.getElementById('bit-crusher-value');
+        const vocalReverbSlider = document.getElementById('vocal-reverb-slider');
+        const vocalReverbValue = document.getElementById('vocal-reverb-value');
+        const vocalDelaySlider = document.getElementById('vocal-delay-slider');
+        const vocalDelayValue = document.getElementById('vocal-delay-value');
 
         // --- STATE ---
         let isPlaying = false;
         let isRecording = false;
         let mediaRecorder;
         let recordedChunks = [];
-        let vocalPart;
+        let ttsPart;
+        let instruments = {};
+        let mic, micStream, pitchShift, bitCrusher;
+        let isMicActive = false;
 
         // --- AUDIO SETUP ---
         const masterBus = new Tone.Gain().toDestination();
-
-        // Recorder setup
-        const recorderDestination = new Tone.Gain();
-        masterBus.connect(recorderDestination);
+        const recorderDestination = new Tone.Gain().connect(masterBus);
         
-        if (navigator.mediaCapabilities) {
+        const vocalReverb = new Tone.Reverb({ decay: 4, wet: 0.2 }).connect(recorderDestination);
+        const vocalDelay = new Tone.FeedbackDelay("8n", 0.25).connect(vocalReverb);
+        
+        const ttsSynth = new Tone.FMSynth({
+            harmonicity: 3.01,
+            modulationIndex: 14,
+            envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 0.2 },
+            modulationEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.1, release: 0.4 }
+        }).connect(vocalDelay);
+
+        if (window.MediaRecorder) {
             const mediaStreamDestination = Tone.context.createMediaStreamDestination();
             recorderDestination.connect(mediaStreamDestination);
-            mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType: 'audio/webm' });
-
-            mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0) recordedChunks.push(event.data);
-            };
-
+            mediaRecorder = new MediaRecorder(mediaStreamDestination.stream);
+            mediaRecorder.ondataavailable = e => e.data.size > 0 && recordedChunks.push(e.data);
             mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
                 recordedChunks = [];
-                // Convert to WAV
                 createWavFile(audioBlob).then(wavBlob => {
-                    const url = URL.createObjectURL(wavBlob);
-                    downloadLink.href = url;
+                    downloadLink.href = URL.createObjectURL(wavBlob);
                     downloadLink.download = `music-gen-${Date.now()}.wav`;
                     downloadArea.classList.remove('hidden');
                 });
             };
         } else {
             recordBtn.disabled = true;
-            recordBtn.textContent = "Navegador no compatible";
+            recordBtn.textContent = "Grabación no soportada";
         }
 
-
-        // --- INSTRUMENTS ---
-        const instruments = {
+        // --- INSTRUMENT DEFINITIONS ---
+        const instrumentLibrary = {
             drums: {
-                synth: new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.01 }).connect(masterBus),
-                hihat: new Tone.MetalSynth({ frequency: 300, envelope: { attack: 0.001, decay: 0.1, release: 0.02 }, harmonicity: 3.1, modulationIndex: 32, resonance: 3000, octaves: 1.5 }).connect(masterBus),
-                loop: null,
-                pattern: ['C1', 'C2', 'C2', 'C2', 'C1', 'C2', 'C2', 'C2']
+                '808 Kit': {
+                    create: () => ({
+                        kick: new Tone.MembraneSynth({ pitchDecay: 0.05, octaves: 10, oscillator: { type: 'sine' }, envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4, attackCurve: 'exponential' } }).connect(recorderDestination),
+                        snare: new Tone.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.005, decay: 0.2, sustain: 0 } }).connect(recorderDestination),
+                        hihat: new Tone.MetalSynth({ frequency: 200, envelope: { attack: 0.001, decay: 0.1, release: 0.02 }, harmonicity: 5.1, modulationIndex: 32, resonance: 4000, octaves: 1.5 }).connect(recorderDestination)
+                    }),
+                    patterns: {
+                        'Hip-Hop': [['C1', 'C2'], 'C2', ['C1', 'C2'], 'C2', 'C1', 'C2', 'C1', 'C2'],
+                        'House': ['C1', 'C2', 'S1', 'C2', 'C1', 'C2', 'S1', 'C2'],
+                    },
+                    trigger: (note, synth) => {
+                        const notes = Array.isArray(note) ? note : [note];
+                        if (notes.includes('C1') && synth.kick && !synth.kick.disposed) synth.kick.triggerAttackRelease('C1', '8n');
+                        if (notes.includes('S1') && synth.snare && !synth.snare.disposed) synth.snare.triggerAttackRelease('4n');
+                        if (notes.includes('C2') && synth.hihat && !synth.hihat.disposed) synth.hihat.triggerAttackRelease('C5', '16n');
+                    }
+                }
             },
             bass: {
-                synth: new Tone.MonoSynth({ oscillator: { type: 'fmsine' }, envelope: { attack: 0.01, decay: 0.2, release: 0.1 } }).connect(masterBus),
-                loop: null
+                'Sub Bass': { create: () => new Tone.MonoSynth({ oscillator: { type: 'sine' }, envelope: { attack: 0.01, decay: 0.2, release: 0.1 } }).connect(recorderDestination) },
+                'Acid Bass': { create: () => new Tone.MonoSynth({ oscillator: { type: 'sawtooth' }, filter: { Q: 2, type: 'lowpass', rolloff: -24 }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.1 }, filterEnvelope: { attack: 0.02, decay: 0.2, sustain: 0.5, release: 0.5, baseFrequency: 200, octaves: 2.6 } }).connect(recorderDestination) }
             },
             chords: {
-                synth: new Tone.PolySynth(Tone.FMSynth, { envelope: { attack: 0.02, decay: 0.3, sustain: 0.1, release: 0.2 } }).connect(masterBus),
-                loop: null
+                'Synth Pad': { create: () => new Tone.PolySynth(Tone.FMSynth, { envelope: { attack: 0.2, decay: 0.5, sustain: 0.3, release: 0.8 } }).connect(recorderDestination) },
+                'Electric Piano': { create: () => new Tone.PolySynth(Tone.Synth, { oscillator: { type: 'fmsine' }, envelope: { attack: 0.01, decay: 0.5, sustain: 0.1, release: 0.5 } }).connect(recorderDestination) }
             },
             lead: {
-                synth: new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 0.3 } }).connect(masterBus),
-                loop: null
+                'Saw Lead': { create: () => new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 0.3 } }).connect(recorderDestination) },
+                'Sine Flute': { create: () => new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.1, decay: 0.2, sustain: 0.2, release: 0.4 } }).connect(recorderDestination) }
             }
         };
 
         // --- MUSIC GENERATION LOGIC ---
-        const Tonal = { // Basic music theory helpers
-            note: (n) => Tone.Frequency(n).toMidi(),
-            transpose: (note, interval) => Tone.Frequency(Tonal.note(note) + interval).toNote(),
+        const Tonal = {
+            note: n => Tone.Frequency(n).toMidi(),
+            transpose: (n, i) => Tone.Frequency(Tonal.note(n) + i).toNote(),
             Scale: {
-                get: (tonic, type) => {
-                    const intervals = {
-                        major: [0, 2, 4, 5, 7, 9, 11],
-                        minor: [0, 2, 3, 5, 7, 8, 10],
-                        pentatonic: [0, 2, 4, 7, 9],
-                        dorian: [0, 2, 3, 5, 7, 9, 10]
-                    };
-                    const selectedIntervals = intervals[type] || intervals.major;
-                    return selectedIntervals.map(i => Tonal.transpose(tonic + '3', i));
+                get: (t, type) => {
+                    const i = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], pentatonic: [0, 2, 4, 7, 9], dorian: [0, 2, 3, 5, 7, 9, 10] };
+                    return (i[type] || i.major).map(iv => Tonal.transpose(t + '3', iv));
                 }
             }
         };
-
+        
         function generateMusic() {
+            if (!audioReady) return;
+            
             const key = keySelect.value;
             const scaleType = scaleSelect.value;
             const scale = Tonal.Scale.get(key, scaleType);
 
-            // Generate Chords
-            const chordProgression = [
-                [scale[0], scale[2], scale[4]], // I
-                [scale[4], scale[6], Tonal.transpose(scale[1], 12)], // V
-                [scale[5], Tonal.transpose(scale[0], 12), Tonal.transpose(scale[2], 12)], // vi
-                [scale[3], scale[5], Tonal.transpose(scale[0], 12)]  // IV
-            ];
-            if (instruments.chords.loop) instruments.chords.loop.dispose();
+            // Chords
+            const chordProgression = [[scale[0], scale[2], scale[4]], [scale[4], scale[6], Tonal.transpose(scale[1], 12)], [scale[5], Tonal.transpose(scale[0], 12), Tonal.transpose(scale[2], 12)], [scale[3], scale[5], Tonal.transpose(scale[0], 12)]];
             instruments.chords.loop = new Tone.Sequence((time, chord) => {
-                instruments.chords.synth.triggerAttackRelease(chord, '1n', time);
+                if (instruments.chords.synth && !instruments.chords.synth.disposed) {
+                    instruments.chords.synth.triggerAttackRelease(chord, '1n', time);
+                }
             }, chordProgression, '1m').start(0);
 
-            // Generate Bassline
+            // Bassline
             const bassline = [chordProgression[0][0], null, chordProgression[1][0], null, chordProgression[2][0], chordProgression[3][0], null, Tonal.transpose(chordProgression[3][0], -12)];
-            if (instruments.bass.loop) instruments.bass.loop.dispose();
             instruments.bass.loop = new Tone.Sequence((time, note) => {
-                if(note) instruments.bass.synth.triggerAttackRelease(Tonal.transpose(note, -12), '8n', time);
+                if(note && instruments.bass.synth && !instruments.bass.synth.disposed) instruments.bass.synth.triggerAttackRelease(Tonal.transpose(note, -12), '8n', time)
             }, bassline, '4n').start(0);
 
-            // Generate Lead
+            // Lead
             const leadPattern = scale.concat(scale.slice(0, 4).reverse());
-            if (instruments.lead.loop) instruments.lead.loop.dispose();
             instruments.lead.loop = new Tone.Pattern((time, note) => {
-                instruments.lead.synth.triggerAttackRelease(Tonal.transpose(note, 12), '16n', time);
+                if(instruments.lead.synth && !instruments.lead.synth.disposed) instruments.lead.synth.triggerAttackRelease(Tonal.transpose(note, 12), '16n', time)
             }, leadPattern, 'randomWalk').start(0);
-            
-            // Generate Drums
-            if (instruments.drums.loop) instruments.drums.loop.dispose();
-            instruments.drums.loop = new Tone.Sequence((time, note) => {
-                if (note === 'C1') instruments.drums.synth.triggerAttackRelease('C1', '8n', time);
-                if (note === 'C2') instruments.drums.hihat.triggerAttackRelease('C5', '16n', time);
-            }, instruments.drums.pattern, '8n').start(0);
+
+            // Drums
+            const drumSelect = document.getElementById('select-drums');
+            const patternSelect = document.getElementById('pattern-drums');
+            if (drumSelect && patternSelect) {
+                const drumDef = instrumentLibrary.drums[drumSelect.value];
+                const drumPatternName = patternSelect.value;
+                const drumPattern = drumDef.patterns[drumPatternName];
+                instruments.drums.loop = new Tone.Sequence((time, note) => {
+                    if(instruments.drums.synth) drumDef.trigger(note, instruments.drums.synth)
+                }, drumPattern, '8n').start(0);
+            }
 
             console.log(`Generated music in ${key} ${scaleType}`);
         }
 
         // --- VOCAL SYNTHESIS ---
         function synthesizeVocals() {
+            if (!audioReady || !isPlaying) return;
             const lyrics = lyricsInput.value.split(/\s+/).filter(w => w.length > 0);
-            if (lyrics.length === 0) return;
-
-            if (vocalPart) vocalPart.dispose();
+            if (!lyrics.length) return;
             
-            const synth = new Tone.PluckSynth({attackNoise: 0.5, dampening: 4000, resonance: 0.7}).connect(masterBus);
-            const timePerWord = Tone.Time('4n').toSeconds();
-            let scheduleTime = 0;
-
+            if (ttsPart) ttsPart.dispose();
+            
+            const scale = Tonal.Scale.get(keySelect.value, scaleSelect.value);
             const events = lyrics.map((word, i) => {
-                const time = scheduleTime;
-                scheduleTime += timePerWord;
-                return {time, word};
+                const note = scale[i % scale.length];
+                const time = Tone.now() + (i * Tone.Time('8n').toSeconds());
+                return { time, note, duration: '16n' };
             });
-            
-            vocalPart = new Tone.Part(((time, {word}) => {
-                const utterance = new SpeechSynthesisUtterance(word);
-                utterance.rate = 1.5; // Speak faster to fit words in time
-                Tone.Draw.schedule(() => speechSynthesis.speak(utterance), time);
+
+            ttsPart = new Tone.Part(((time, value) => {
+                if (ttsSynth && !ttsSynth.disposed) {
+                    ttsSynth.triggerAttackRelease(value.note, value.duration, time);
+                }
             }), events).start(0);
         }
 
-
-        // --- UI CONTROLS ---
+        // --- UI & CONTROLS ---
         playStopBtn.addEventListener('click', () => {
+            if (!audioReady) return;
+            isPlaying = !isPlaying;
             if (isPlaying) {
-                Tone.Transport.stop();
-                playStopBtn.textContent = '▶ Play';
-            } else {
                 Tone.Transport.start();
                 playStopBtn.textContent = '⏹ Stop';
+            } else {
+                Tone.Transport.stop();
+                playStopBtn.textContent = '▶ Play';
             }
-            isPlaying = !isPlaying;
         });
 
         recordBtn.addEventListener('click', () => {
+            if (!audioReady) return;
+            isRecording = !isRecording;
             if (isRecording) {
-                mediaRecorder.stop();
-                recordBtn.textContent = '● Grabar';
-                recordBtn.classList.remove('recording');
-            } else {
-                if (!isPlaying) {
-                    alert("Debes darle a 'Play' antes de grabar.");
-                    return;
-                }
+                if (!isPlaying) { alert("Debes darle a 'Play' antes de grabar."); isRecording = false; return; }
                 downloadArea.classList.add('hidden');
                 recordedChunks = [];
                 mediaRecorder.start();
                 recordBtn.textContent = 'Parar';
                 recordBtn.classList.add('recording');
+            } else {
+                mediaRecorder.stop();
+                recordBtn.textContent = '● Grabar';
+                recordBtn.classList.remove('recording');
             }
-            isRecording = !isRecording;
         });
 
-        bpmSlider.addEventListener('input', (e) => {
+        bpmSlider.addEventListener('input', e => {
             Tone.Transport.bpm.value = e.target.value;
             bpmValue.textContent = e.target.value;
         });
         Tone.Transport.bpm.value = 120;
 
-        regenerateBtn.addEventListener('click', generateMusic);
-        [keySelect, scaleSelect].forEach(el => el.addEventListener('change', generateMusic));
+        const safeRegenerate = () => {
+             const wasPlaying = Tone.Transport.state === 'running';
+             if (wasPlaying) Tone.Transport.stop();
+             Tone.Transport.cancel(0);
+             Object.values(instruments).forEach(inst => inst?.loop?.dispose());
+             generateMusic();
+             if(wasPlaying) Tone.Transport.start();
+        }
+        regenerateBtn.addEventListener('click', safeRegenerate);
+        [keySelect, scaleSelect].forEach(el => el.addEventListener('change', safeRegenerate));
+        
         singBtn.addEventListener('click', synthesizeVocals);
+        
+        vocalReverbSlider.addEventListener('input', e => {
+            vocalReverbValue.textContent = e.target.value;
+            if(vocalReverb) vocalReverb.wet.value = parseFloat(e.target.value) / 100;
+        });
+        vocalDelaySlider.addEventListener('input', e => {
+            vocalDelayValue.textContent = e.target.value;
+            if(vocalDelay) vocalDelay.wet.value = parseFloat(e.target.value) / 100;
+        });
+        pitchShiftSlider.addEventListener('input', e => {
+            pitchShiftValue.textContent = e.target.value;
+            if(pitchShift) pitchShift.pitch = parseInt(e.target.value);
+        });
+        bitCrusherSlider.addEventListener('input', e => {
+            bitCrusherValue.textContent = e.target.value;
+            if(bitCrusher) bitCrusher.bits.value = parseInt(e.target.value);
+        });
+
+
+        new Tone.Loop(time => {
+            Tone.Draw.schedule(() => progressBar.style.width = `${Tone.Transport.progress * 100}%`, time);
+        }, '16n').start(0);
+
+        // --- MIC/ROBOT VOICE LOGIC ---
+        micBtn.addEventListener('click', async () => {
+            if (!audioReady) return;
+            isMicActive = !isMicActive;
+            if (isMicActive) {
+                if (!mic) mic = new Tone.UserMedia();
+                if (!pitchShift) pitchShift = new Tone.PitchShift({ pitch: 0 }).connect(vocalDelay);
+                if (!bitCrusher) bitCrusher = new Tone.BitCrusher({ bits: 4 }).connect(pitchShift);
+                
+                await mic.open();
+                mic.connect(bitCrusher);
+                micBtn.textContent = "Desactivar Voz";
+                micBtn.classList.add('recording');
+            } else {
+                if (mic) mic.close();
+                micBtn.textContent = "Activar Voz Robótica";
+                micBtn.classList.remove('recording');
+            }
+        });
 
         // --- MIXER UI ---
         function createMixerUI() {
             mixerContainer.innerHTML = '';
-            const instrumentOrder = ['drums', 'bass', 'chords', 'lead'];
-            instrumentOrder.forEach(name => {
-                const inst = instruments[name];
+            Object.keys(instrumentLibrary).forEach(instType => {
                 const channel = document.createElement('div');
-                channel.className = 'bg-gray-700/50 p-3 rounded-lg flex flex-col items-center space-y-2';
-                const nameCap = name.charAt(0).toUpperCase() + name.slice(1);
-                
+                channel.className = 'bg-gray-700/50 p-3 rounded-lg flex flex-col space-y-3';
+                const nameCap = instType.charAt(0).toUpperCase() + instType.slice(1);
+
+                let optionsHTML = Object.keys(instrumentLibrary[instType]).map(name => `<option value="${name}">${name}</option>`).join('');
+                let patternHTML = '';
+                if (instType === 'drums') {
+                    const firstDrum = Object.keys(instrumentLibrary.drums)[0];
+                    patternHTML = `<label class="text-sm">Patrón</label><select id="pattern-drums" class="rounded-md w-full p-1 text-sm">${Object.keys(instrumentLibrary.drums[firstDrum].patterns).map(p => `<option value="${p}">${p}</option>`).join('')}</select>`;
+                }
+
                 channel.innerHTML = `
-                    <h3 class="font-semibold">${nameCap}</h3>
-                    <div class="flex gap-2">
-                        <button class="btn mute-btn w-12 bg-gray-600 rounded p-1">Mute</button>
+                    <h3 class="font-semibold text-center">${nameCap}</h3>
+                    <label class="text-sm">Sonido</label>
+                    <select id="select-${instType}" class="rounded-md w-full p-1 text-sm">${optionsHTML}</select>
+                    ${patternHTML}
+                    <div class="flex items-center justify-between gap-2 pt-2">
+                        <button class="btn mute-btn w-12 bg-gray-600 rounded p-1 text-sm">Mute</button>
+                        <input type="range" class="volume-slider w-full" min="-48" max="6" value="0">
                     </div>
-                    <input type="range" class="volume-slider w-full" min="-48" max="6" value="0">
                 `;
-                
+                mixerContainer.appendChild(channel);
+
+                const selectEl = channel.querySelector(`#select-${instType}`);
                 const muteBtn = channel.querySelector('.mute-btn');
                 const volumeSlider = channel.querySelector('.volume-slider');
+                
+                const changeInstrument = () => {
+                    const wasPlaying = Tone.Transport.state === 'running';
+                    if (wasPlaying) Tone.Transport.stop();
+                    Tone.Transport.cancel(0);
+                    Object.values(instruments).forEach(inst => inst?.loop?.dispose());
 
-                const synthsToControl = Object.values(inst).filter(v => v instanceof Tone.Synth || v instanceof Tone.PolySynth || v instanceof Tone.MembraneSynth || v instanceof Tone.MetalSynth);
+                    if (!instruments[instType]) {
+                        instruments[instType] = {};
+                    }
+                    
+                    const oldSynth = instruments[instType]?.synth;
+                    if (oldSynth) {
+                        if (typeof oldSynth.dispose === 'function') {
+                            if (!oldSynth.disposed) oldSynth.dispose();
+                        } else if (typeof oldSynth === 'object') {
+                            Object.values(oldSynth).forEach(s => {
+                                if (s && typeof s.dispose === 'function' && !s.disposed) {
+                                    s.dispose();
+                                }
+                            });
+                        }
+                    }
+
+                    const newInstName = selectEl.value;
+                    instruments[instType].synth = instrumentLibrary[instType][newInstName].create();
+                    
+                    volumeSlider.dispatchEvent(new Event('input'));
+                    
+                    const isMuted = muteBtn.classList.contains('active');
+                    const synthsToMute = instruments[instType].synth;
+                    if (synthsToMute) {
+                       if (typeof synthsToMute.mute !== 'undefined') {
+                           synthsToMute.mute = isMuted;
+                       } else if (typeof synthsToMute === 'object') {
+                           Object.values(synthsToMute).forEach(s => {
+                               if (s && typeof s.mute !== 'undefined') {
+                                   s.mute = isMuted;
+                               }
+                           });
+                       }
+                    }
+
+                    generateMusic();
+                    if(wasPlaying) Tone.Transport.start();
+                };
+                
+                selectEl.addEventListener('change', changeInstrument);
+                if (instType === 'drums') channel.querySelector('#pattern-drums').addEventListener('change', safeRegenerate);
 
                 muteBtn.addEventListener('click', () => {
                     const isMuted = muteBtn.classList.toggle('active');
-                    synthsToControl.forEach(s => s.mute = isMuted);
+                    const synthsToMute = instruments[instType]?.synth;
+                    if (synthsToMute) {
+                       if (typeof synthsToMute.mute !== 'undefined') {
+                           synthsToMute.mute = isMuted;
+                       } else if (typeof synthsToMute === 'object') {
+                           Object.values(synthsToMute).forEach(s => {
+                               if (s && typeof s.mute !== 'undefined') {
+                                   s.mute = isMuted;
+                               }
+                           });
+                       }
+                    }
                 });
 
-                volumeSlider.addEventListener('input', (e) => {
-                    synthsToControl.forEach(s => s.volume.value = e.target.value);
+                volumeSlider.addEventListener('input', e => {
+                    const synthsToControl = instruments[instType]?.synth;
+                     if (synthsToControl) {
+                        if (synthsToControl.volume && typeof synthsToControl.volume.value !== 'undefined') {
+                            synthsToControl.volume.value = e.target.value;
+                        } else if (typeof synthsToControl === 'object') {
+                            Object.values(synthsToControl).forEach(s => {
+                                if (s && s.volume && typeof s.volume.value !== 'undefined') {
+                                    s.volume.value = e.target.value;
+                                }
+                            });
+                        }
+                    }
                 });
-                
-                mixerContainer.appendChild(channel);
+
+                changeInstrument();
             });
         }
-        
+
         // --- WAV CONVERSION ---
         async function createWavFile(webmBlob) {
-            // Use a new offline AudioContext to ensure the sample rate is 44100 for the final file
-            const offlineContext = new OfflineAudioContext(2, 44100 * 5 * 60, 44100); // 2 channels, 5 minutes max length
-            const arrayBuffer = await webmBlob.arrayBuffer();
-            const decodedBuffer = await new AudioContext().decodeAudioData(arrayBuffer);
-            
-            const bufferSource = offlineContext.createBufferSource();
-            bufferSource.buffer = decodedBuffer;
-            bufferSource.connect(offlineContext.destination);
+            const tempAudioContext = new AudioContext();
+            const renderedBuffer = await tempAudioContext.decodeAudioData(await webmBlob.arrayBuffer());
+            const wavAudioContext = new OfflineAudioContext(renderedBuffer.numberOfChannels, renderedBuffer.length, renderedBuffer.sampleRate);
+            const bufferSource = wavAudioContext.createBufferSource();
+            bufferSource.buffer = renderedBuffer;
+            bufferSource.connect(wavAudioContext.destination);
             bufferSource.start();
+            const finalBuffer = await wavAudioContext.startRendering();
 
-            const renderedBuffer = await offlineContext.startRendering();
-
-            // Create WAV header and data from the rendered buffer
-            const numChannels = 2; // Stereo
-            const sampleRate = 44100;
-            const bitsPerSample = 16;
-            const numSamples = renderedBuffer.length;
-            const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+            const numChannels = finalBuffer.numberOfChannels, len = finalBuffer.length, sampleRate = finalBuffer.sampleRate, bitsPerSample = 16;
+            const dataSize = len * numChannels * (bitsPerSample / 8);
             const buffer = new ArrayBuffer(44 + dataSize);
             const view = new DataView(buffer);
 
-            function writeString(view, offset, string) {
-                for (let i = 0; i < string.length; i++) {
-                    view.setUint8(offset + i, string.charCodeAt(i));
-                }
-            }
-
+            const writeString = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
             let offset = 0;
-            writeString(view, offset, 'RIFF'); offset += 4;
+            writeString(offset, 'RIFF'); offset += 4;
             view.setUint32(offset, 36 + dataSize, true); offset += 4;
-            writeString(view, offset, 'WAVE'); offset += 4;
-            writeString(view, offset, 'fmt '); offset += 4;
+            writeString(offset, 'WAVE'); offset += 4;
+            writeString(offset, 'fmt '); offset += 4;
             view.setUint32(offset, 16, true); offset += 4;
-            view.setUint16(offset, 1, true); offset += 2; // PCM
+            view.setUint16(offset, 1, true); offset += 2;
             view.setUint16(offset, numChannels, true); offset += 2;
             view.setUint32(offset, sampleRate, true); offset += 4;
-            view.setUint32(offset, sampleRate * numChannels * (bitsPerSample / 8), true); offset += 4; // byteRate
-            view.setUint16(offset, numChannels * (bitsPerSample / 8), true); offset += 2; // blockAlign
+            view.setUint32(offset, sampleRate * numChannels * (bitsPerSample / 8), true); offset += 4;
+            view.setUint16(offset, numChannels * (bitsPerSample / 8), true); offset += 2;
             view.setUint16(offset, bitsPerSample, true); offset += 2;
-            writeString(view, offset, 'data'); offset += 4;
+            writeString(offset, 'data'); offset += 4;
             view.setUint32(offset, dataSize, true); offset += 4;
 
-            // Write audio data
-            const channel1 = renderedBuffer.getChannelData(0);
-            const channel2 = renderedBuffer.numberOfChannels > 1 ? renderedBuffer.getChannelData(1) : channel1;
-
-            for (let i = 0; i < numSamples; i++) {
-                let s1 = Math.max(-1, Math.min(1, channel1[i]));
-                view.setInt16(offset, s1 < 0 ? s1 * 0x8000 : s1 * 0x7FFF, true);
-                offset += 2;
-                let s2 = Math.max(-1, Math.min(1, channel2[i]));
-                view.setInt16(offset, s2 < 0 ? s2 * 0x8000 : s2 * 0x7FFF, true);
-                offset += 2;
+            for (let i = 0; i < len; i++) {
+                for (let ch = 0; ch < numChannels; ch++) {
+                    let s = Math.max(-1, Math.min(1, finalBuffer.getChannelData(ch)[i]));
+                    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                    offset += 2;
+                }
             }
-
             return new Blob([view], { type: 'audio/wav' });
         }
 
-        // Initial setup
         createMixerUI();
-        generateMusic();
     });
     </script>
 </body>
