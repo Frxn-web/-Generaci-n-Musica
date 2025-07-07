@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAW de Generación Musical con Descarga WAV</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .btn { transition: all 0.2s ease-in-out; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+        .btn.active { background-color: #10B981; color: white; }
+        .btn-record.recording { background-color: #EF4444; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        select, input[type="text"] { background-color: #374151; border-color: #4B5563; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-4xl bg-gray-800 rounded-2xl shadow-2xl p-6 md:p-8 space-y-6 border border-gray-700">
+        
+        <header class="text-center">
+            <h1 class="text-3xl md:text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-indigo-500">DAW Generativo</h1>
+            <p class="text-gray-400 mt-1">Tu estudio de música IA con exportación profesional</p>
+        </header>
+
+        <!-- Global Controls -->
+        <section class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 flex flex-wrap justify-between items-center gap-4">
+            <div class="flex items-center gap-4">
+                <button id="play-stop-btn" class="btn px-6 py-2 bg-green-600 rounded-lg text-lg font-semibold shadow-lg w-28">▶ Play</button>
+                <button id="record-btn" class="btn btn-record px-6 py-2 bg-red-700 rounded-lg text-lg font-semibold shadow-lg">● Grabar</button>
+            </div>
+            <div class="flex items-center gap-2">
+                <label for="bpm-slider" class="font-medium">BPM:</label>
+                <span id="bpm-value" class="font-bold w-10 text-center">120</span>
+                <input type="range" id="bpm-slider" min="60" max="180" value="120" class="w-32">
+            </div>
+        </section>
+
+        <!-- Song Structure -->
+        <section class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 space-y-4">
+            <h2 class="text-xl font-semibold text-center text-gray-300">Estructura de la Canción</h2>
+            <div class="flex flex-wrap justify-around gap-4">
+                <div>
+                    <label for="key-select" class="block text-sm font-medium text-gray-300 mb-1">Tonalidad</label>
+                    <select id="key-select" class="rounded-md w-32 p-2">
+                        <option>C</option><option>C#</option><option>D</option><option>D#</option><option>E</option><option>F</option><option>F#</option><option>G</option><option>G#</option><option>A</option><option>A#</option><option>B</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="scale-select" class="block text-sm font-medium text-gray-300 mb-1">Escala</label>
+                    <select id="scale-select" class="rounded-md w-32 p-2">
+                        <option value="major">Mayor</option><option value="minor">Menor</option><option value="pentatonic">Pentatónica</option><option value="dorian">Dórica</option>
+                    </select>
+                </div>
+                <button id="regenerate-btn" class="btn self-end w-full md:w-auto mt-2 md:mt-0 py-2 px-4 bg-blue-600 rounded-lg font-semibold shadow-lg">Generar Música</button>
+            </div>
+        </section>
+
+        <!-- Mixer -->
+        <section class="space-y-2">
+            <h2 class="text-xl font-semibold text-center text-gray-300 mb-4">Mezclador</h2>
+            <div id="mixer-container" class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <!-- Instrument channels will be injected here by JS -->
+            </div>
+        </section>
+
+        <!-- Lyrics -->
+        <section class="space-y-3">
+            <h2 class="text-xl font-semibold text-center text-gray-300">Sintetizador Vocal</h2>
+            <div class="bg-gray-900/50 p-4 rounded-xl border border-gray-700 space-y-3">
+                <textarea id="lyrics-input" class="w-full h-24 bg-gray-700 text-white p-2 rounded-lg focus:ring-2 focus:ring-purple-400 focus:outline-none" placeholder="Escribe aquí... la voz seguirá el ritmo."></textarea>
+                <button id="sing-btn" class="btn w-full py-2 bg-purple-600 rounded-lg font-semibold shadow-lg">Sintetizar Voz</button>
+            </div>
+        </section>
+
+        <!-- Download Area -->
+        <div id="download-area" class="hidden text-center p-4 bg-green-900/30 rounded-lg">
+            <p class="font-semibold">¡Grabación completa!</p>
+            <a id="download-link" class="btn inline-block mt-2 py-2 px-6 bg-green-500 rounded-lg">Descargar WAV</a>
+        </div>
+    </div>
+
+    <script>
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+        // Prevent Tone.js from starting until user interaction
+        document.body.addEventListener('click', async () => {
+            if (Tone.context.state !== 'running') {
+                // **FIXED**: Removed the problematic line `Tone.context.set()` which caused the error.
+                // Tone.js will automatically use the browser's default sample rate (usually 44.1kHz or 48kHz),
+                // which is suitable for professional audio.
+                await Tone.start();
+                console.log('AudioContext started at ' + Tone.context.sampleRate + 'kHz.');
+            }
+        }, { once: true });
+
+        // --- DOM ELEMENTS ---
+        const playStopBtn = document.getElementById('play-stop-btn');
+        const recordBtn = document.getElementById('record-btn');
+        const bpmSlider = document.getElementById('bpm-slider');
+        const bpmValue = document.getElementById('bpm-value');
+        const regenerateBtn = document.getElementById('regenerate-btn');
+        const keySelect = document.getElementById('key-select');
+        const scaleSelect = document.getElementById('scale-select');
+        const mixerContainer = document.getElementById('mixer-container');
+        const lyricsInput = document.getElementById('lyrics-input');
+        const singBtn = document.getElementById('sing-btn');
+        const downloadArea = document.getElementById('download-area');
+        const downloadLink = document.getElementById('download-link');
+
+        // --- STATE ---
+        let isPlaying = false;
+        let isRecording = false;
+        let mediaRecorder;
+        let recordedChunks = [];
+        let vocalPart;
+
+        // --- AUDIO SETUP ---
+        const masterBus = new Tone.Gain().toDestination();
+
+        // Recorder setup
+        const recorderDestination = new Tone.Gain();
+        masterBus.connect(recorderDestination);
+        
+        if (navigator.mediaCapabilities) {
+            const mediaStreamDestination = Tone.context.createMediaStreamDestination();
+            recorderDestination.connect(mediaStreamDestination);
+            mediaRecorder = new MediaRecorder(mediaStreamDestination.stream, { mimeType: 'audio/webm' });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) recordedChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(recordedChunks, { type: 'audio/webm' });
+                recordedChunks = [];
+                // Convert to WAV
+                createWavFile(audioBlob).then(wavBlob => {
+                    const url = URL.createObjectURL(wavBlob);
+                    downloadLink.href = url;
+                    downloadLink.download = `music-gen-${Date.now()}.wav`;
+                    downloadArea.classList.remove('hidden');
+                });
+            };
+        } else {
+            recordBtn.disabled = true;
+            recordBtn.textContent = "Navegador no compatible";
+        }
+
+
+        // --- INSTRUMENTS ---
+        const instruments = {
+            drums: {
+                synth: new Tone.MembraneSynth({ octaves: 6, pitchDecay: 0.01 }).connect(masterBus),
+                hihat: new Tone.MetalSynth({ frequency: 300, envelope: { attack: 0.001, decay: 0.1, release: 0.02 }, harmonicity: 3.1, modulationIndex: 32, resonance: 3000, octaves: 1.5 }).connect(masterBus),
+                loop: null,
+                pattern: ['C1', 'C2', 'C2', 'C2', 'C1', 'C2', 'C2', 'C2']
+            },
+            bass: {
+                synth: new Tone.MonoSynth({ oscillator: { type: 'fmsine' }, envelope: { attack: 0.01, decay: 0.2, release: 0.1 } }).connect(masterBus),
+                loop: null
+            },
+            chords: {
+                synth: new Tone.PolySynth(Tone.FMSynth, { envelope: { attack: 0.02, decay: 0.3, sustain: 0.1, release: 0.2 } }).connect(masterBus),
+                loop: null
+            },
+            lead: {
+                synth: new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.05, decay: 0.2, sustain: 0.2, release: 0.3 } }).connect(masterBus),
+                loop: null
+            }
+        };
+
+        // --- MUSIC GENERATION LOGIC ---
+        const Tonal = { // Basic music theory helpers
+            note: (n) => Tone.Frequency(n).toMidi(),
+            transpose: (note, interval) => Tone.Frequency(Tonal.note(note) + interval).toNote(),
+            Scale: {
+                get: (tonic, type) => {
+                    const intervals = {
+                        major: [0, 2, 4, 5, 7, 9, 11],
+                        minor: [0, 2, 3, 5, 7, 8, 10],
+                        pentatonic: [0, 2, 4, 7, 9],
+                        dorian: [0, 2, 3, 5, 7, 9, 10]
+                    };
+                    const selectedIntervals = intervals[type] || intervals.major;
+                    return selectedIntervals.map(i => Tonal.transpose(tonic + '3', i));
+                }
+            }
+        };
+
+        function generateMusic() {
+            const key = keySelect.value;
+            const scaleType = scaleSelect.value;
+            const scale = Tonal.Scale.get(key, scaleType);
+
+            // Generate Chords
+            const chordProgression = [
+                [scale[0], scale[2], scale[4]], // I
+                [scale[4], scale[6], Tonal.transpose(scale[1], 12)], // V
+                [scale[5], Tonal.transpose(scale[0], 12), Tonal.transpose(scale[2], 12)], // vi
+                [scale[3], scale[5], Tonal.transpose(scale[0], 12)]  // IV
+            ];
+            if (instruments.chords.loop) instruments.chords.loop.dispose();
+            instruments.chords.loop = new Tone.Sequence((time, chord) => {
+                instruments.chords.synth.triggerAttackRelease(chord, '1n', time);
+            }, chordProgression, '1m').start(0);
+
+            // Generate Bassline
+            const bassline = [chordProgression[0][0], null, chordProgression[1][0], null, chordProgression[2][0], chordProgression[3][0], null, Tonal.transpose(chordProgression[3][0], -12)];
+            if (instruments.bass.loop) instruments.bass.loop.dispose();
+            instruments.bass.loop = new Tone.Sequence((time, note) => {
+                if(note) instruments.bass.synth.triggerAttackRelease(Tonal.transpose(note, -12), '8n', time);
+            }, bassline, '4n').start(0);
+
+            // Generate Lead
+            const leadPattern = scale.concat(scale.slice(0, 4).reverse());
+            if (instruments.lead.loop) instruments.lead.loop.dispose();
+            instruments.lead.loop = new Tone.Pattern((time, note) => {
+                instruments.lead.synth.triggerAttackRelease(Tonal.transpose(note, 12), '16n', time);
+            }, leadPattern, 'randomWalk').start(0);
+            
+            // Generate Drums
+            if (instruments.drums.loop) instruments.drums.loop.dispose();
+            instruments.drums.loop = new Tone.Sequence((time, note) => {
+                if (note === 'C1') instruments.drums.synth.triggerAttackRelease('C1', '8n', time);
+                if (note === 'C2') instruments.drums.hihat.triggerAttackRelease('C5', '16n', time);
+            }, instruments.drums.pattern, '8n').start(0);
+
+            console.log(`Generated music in ${key} ${scaleType}`);
+        }
+
+        // --- VOCAL SYNTHESIS ---
+        function synthesizeVocals() {
+            const lyrics = lyricsInput.value.split(/\s+/).filter(w => w.length > 0);
+            if (lyrics.length === 0) return;
+
+            if (vocalPart) vocalPart.dispose();
+            
+            const synth = new Tone.PluckSynth({attackNoise: 0.5, dampening: 4000, resonance: 0.7}).connect(masterBus);
+            const timePerWord = Tone.Time('4n').toSeconds();
+            let scheduleTime = 0;
+
+            const events = lyrics.map((word, i) => {
+                const time = scheduleTime;
+                scheduleTime += timePerWord;
+                return {time, word};
+            });
+            
+            vocalPart = new Tone.Part(((time, {word}) => {
+                const utterance = new SpeechSynthesisUtterance(word);
+                utterance.rate = 1.5; // Speak faster to fit words in time
+                Tone.Draw.schedule(() => speechSynthesis.speak(utterance), time);
+            }), events).start(0);
+        }
+
+
+        // --- UI CONTROLS ---
+        playStopBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                playStopBtn.textContent = '▶ Play';
+            } else {
+                Tone.Transport.start();
+                playStopBtn.textContent = '⏹ Stop';
+            }
+            isPlaying = !isPlaying;
+        });
+
+        recordBtn.addEventListener('click', () => {
+            if (isRecording) {
+                mediaRecorder.stop();
+                recordBtn.textContent = '● Grabar';
+                recordBtn.classList.remove('recording');
+            } else {
+                if (!isPlaying) {
+                    alert("Debes darle a 'Play' antes de grabar.");
+                    return;
+                }
+                downloadArea.classList.add('hidden');
+                recordedChunks = [];
+                mediaRecorder.start();
+                recordBtn.textContent = 'Parar';
+                recordBtn.classList.add('recording');
+            }
+            isRecording = !isRecording;
+        });
+
+        bpmSlider.addEventListener('input', (e) => {
+            Tone.Transport.bpm.value = e.target.value;
+            bpmValue.textContent = e.target.value;
+        });
+        Tone.Transport.bpm.value = 120;
+
+        regenerateBtn.addEventListener('click', generateMusic);
+        [keySelect, scaleSelect].forEach(el => el.addEventListener('change', generateMusic));
+        singBtn.addEventListener('click', synthesizeVocals);
+
+        // --- MIXER UI ---
+        function createMixerUI() {
+            mixerContainer.innerHTML = '';
+            const instrumentOrder = ['drums', 'bass', 'chords', 'lead'];
+            instrumentOrder.forEach(name => {
+                const inst = instruments[name];
+                const channel = document.createElement('div');
+                channel.className = 'bg-gray-700/50 p-3 rounded-lg flex flex-col items-center space-y-2';
+                const nameCap = name.charAt(0).toUpperCase() + name.slice(1);
+                
+                channel.innerHTML = `
+                    <h3 class="font-semibold">${nameCap}</h3>
+                    <div class="flex gap-2">
+                        <button class="btn mute-btn w-12 bg-gray-600 rounded p-1">Mute</button>
+                    </div>
+                    <input type="range" class="volume-slider w-full" min="-48" max="6" value="0">
+                `;
+                
+                const muteBtn = channel.querySelector('.mute-btn');
+                const volumeSlider = channel.querySelector('.volume-slider');
+
+                const synthsToControl = Object.values(inst).filter(v => v instanceof Tone.Synth || v instanceof Tone.PolySynth || v instanceof Tone.MembraneSynth || v instanceof Tone.MetalSynth);
+
+                muteBtn.addEventListener('click', () => {
+                    const isMuted = muteBtn.classList.toggle('active');
+                    synthsToControl.forEach(s => s.mute = isMuted);
+                });
+
+                volumeSlider.addEventListener('input', (e) => {
+                    synthsToControl.forEach(s => s.volume.value = e.target.value);
+                });
+                
+                mixerContainer.appendChild(channel);
+            });
+        }
+        
+        // --- WAV CONVERSION ---
+        async function createWavFile(webmBlob) {
+            // Use a new offline AudioContext to ensure the sample rate is 44100 for the final file
+            const offlineContext = new OfflineAudioContext(2, 44100 * 5 * 60, 44100); // 2 channels, 5 minutes max length
+            const arrayBuffer = await webmBlob.arrayBuffer();
+            const decodedBuffer = await new AudioContext().decodeAudioData(arrayBuffer);
+            
+            const bufferSource = offlineContext.createBufferSource();
+            bufferSource.buffer = decodedBuffer;
+            bufferSource.connect(offlineContext.destination);
+            bufferSource.start();
+
+            const renderedBuffer = await offlineContext.startRendering();
+
+            // Create WAV header and data from the rendered buffer
+            const numChannels = 2; // Stereo
+            const sampleRate = 44100;
+            const bitsPerSample = 16;
+            const numSamples = renderedBuffer.length;
+            const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+            const buffer = new ArrayBuffer(44 + dataSize);
+            const view = new DataView(buffer);
+
+            function writeString(view, offset, string) {
+                for (let i = 0; i < string.length; i++) {
+                    view.setUint8(offset + i, string.charCodeAt(i));
+                }
+            }
+
+            let offset = 0;
+            writeString(view, offset, 'RIFF'); offset += 4;
+            view.setUint32(offset, 36 + dataSize, true); offset += 4;
+            writeString(view, offset, 'WAVE'); offset += 4;
+            writeString(view, offset, 'fmt '); offset += 4;
+            view.setUint32(offset, 16, true); offset += 4;
+            view.setUint16(offset, 1, true); offset += 2; // PCM
+            view.setUint16(offset, numChannels, true); offset += 2;
+            view.setUint32(offset, sampleRate, true); offset += 4;
+            view.setUint32(offset, sampleRate * numChannels * (bitsPerSample / 8), true); offset += 4; // byteRate
+            view.setUint16(offset, numChannels * (bitsPerSample / 8), true); offset += 2; // blockAlign
+            view.setUint16(offset, bitsPerSample, true); offset += 2;
+            writeString(view, offset, 'data'); offset += 4;
+            view.setUint32(offset, dataSize, true); offset += 4;
+
+            // Write audio data
+            const channel1 = renderedBuffer.getChannelData(0);
+            const channel2 = renderedBuffer.numberOfChannels > 1 ? renderedBuffer.getChannelData(1) : channel1;
+
+            for (let i = 0; i < numSamples; i++) {
+                let s1 = Math.max(-1, Math.min(1, channel1[i]));
+                view.setInt16(offset, s1 < 0 ? s1 * 0x8000 : s1 * 0x7FFF, true);
+                offset += 2;
+                let s2 = Math.max(-1, Math.min(1, channel2[i]));
+                view.setInt16(offset, s2 < 0 ? s2 * 0x8000 : s2 * 0x7FFF, true);
+                offset += 2;
+            }
+
+            return new Blob([view], { type: 'audio/wav' });
+        }
+
+        // Initial setup
+        createMixerUI();
+        generateMusic();
+    });
+    </script>
+</body>
+</html>
